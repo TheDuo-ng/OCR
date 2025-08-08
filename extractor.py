@@ -6,6 +6,7 @@ import datetime
 import tkinter as tk
 from tkinter import messagebox
 import argparse
+from tqdm import tqdm
 
 # Import PySceneDetect components
 from scenedetect import open_video, SceneManager
@@ -111,14 +112,6 @@ def frames_to_time_str(frame_count, fps):
     time_str = f"{hours:02d}_{minutes:02d}_{seconds:02d}"
     return f"{time_str}_{ms:03d}"
 
-def draw_progress_bar(iteration, total, prefix='', suffix='', length=50, fill='█'):
-    """Creates a text-based progress bar."""
-    percent = ("{0:.1f}").format(100 * (iteration / float(total)))
-    filled_length = int(length * iteration // total)
-    bar = fill * filled_length + '-' * (length - filled_length)
-    sys.stdout.write(f'\r{prefix} |{bar}| {percent}% {suffix}')
-    sys.stdout.flush()
-
 def main(video_path, roi=None, scene_threshold=SCENE_DETECT_THRESHOLD, change_threshold=CHANGE_THRESHOLD):
     print("================ STARTING IMAGE EXTRACTION (Hybrid Mode) ================")
 
@@ -157,27 +150,21 @@ def main(video_path, roi=None, scene_threshold=SCENE_DETECT_THRESHOLD, change_th
     y1, y2, x1, x2 = crop_rect
     total_images_saved = 0
 
-    for i, (start_time, end_time) in enumerate(scene_list):
-        scene_prefix = f"Processing Scene {i+1}/{len(scene_list)}"
-        
+    for i, (start_time, end_time) in enumerate(tqdm(scene_list, desc="Scenes", unit="scene", ascii=True)):
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_time.get_frames())
-        
+
         last_img = None
         subtitle_present = False
         subtitle_start_frame = 0
-        
-        scene_total_frames = end_time.get_frames() - start_time.get_frames()
-        scene_processed_frames = 0
-        
-        for frame_number in range(start_time.get_frames(), end_time.get_frames()):
-            ret, frame = cap.read()
-            if not ret: break
 
-            scene_processed_frames += 1
-            draw_progress_bar(scene_processed_frames, scene_total_frames, prefix=scene_prefix, suffix='Complete')
+        frame_range = range(start_time.get_frames(), end_time.get_frames())
+        for frame_number in tqdm(frame_range, desc=f"Scene {i+1}/{len(scene_list)}", unit="frame", ascii=True, leave=False):
+            ret, frame = cap.read()
+            if not ret:
+                break
 
             sub_region = frame[y1:y2, x1:x2]
-            
+
             if last_img is not None:
                 diff = cv2.absdiff(sub_region, last_img)
                 diff_score = np.sum(diff)
@@ -197,7 +184,7 @@ def main(video_path, roi=None, scene_threshold=SCENE_DETECT_THRESHOLD, change_th
                             cv2.imwrite(img_path, last_img)
                             total_images_saved += 1
                         subtitle_present = False
-            
+
             last_img = sub_region.copy()
 
         if subtitle_present and last_img is not None:
@@ -209,9 +196,6 @@ def main(video_path, roi=None, scene_threshold=SCENE_DETECT_THRESHOLD, change_th
                 img_path = os.path.join(temp_folder, img_name)
                 cv2.imwrite(img_path, last_img)
                 total_images_saved += 1
-        
-        sys.stdout.write('\n') # Move to next line after progress bar
-        sys.stdout.flush()
 
     print(f"\n[SUCCESS] Finished extraction. Total images saved: {total_images_saved}.")
     cap.release()

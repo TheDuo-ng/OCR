@@ -119,12 +119,12 @@ def draw_progress_bar(iteration, total, prefix='', suffix='', length=50, fill='â
     sys.stdout.write(f'\r{prefix} |{bar}| {percent}% {suffix}')
     sys.stdout.flush()
 
-def main(video_path):
+def main(video_path, roi=None, scene_threshold=SCENE_DETECT_THRESHOLD, change_threshold=CHANGE_THRESHOLD):
     print("================ STARTING IMAGE EXTRACTION (Hybrid Mode) ================")
-    
+
     base_path = os.path.splitext(video_path)[0]
     temp_folder = base_path + "_sub_images"
-    
+
     if not os.path.exists(temp_folder):
         os.makedirs(temp_folder)
         print(f"[INFO] Created temp folder: {temp_folder}")
@@ -134,7 +134,7 @@ def main(video_path):
             if f.endswith('.png'):
                 os.remove(os.path.join(temp_folder, f))
 
-    crop_rect = select_subtitle_area(video_path)
+    crop_rect = roi if roi else select_subtitle_area(video_path)
     if not crop_rect:
         print("[ERROR] No subtitle region selected. Exiting.")
         return
@@ -142,7 +142,7 @@ def main(video_path):
     print("\n--- Step 1.1: Detecting scenes with PySceneDetect ---")
     video = open_video(video_path)
     scene_manager = SceneManager()
-    scene_manager.add_detector(ContentDetector(threshold=SCENE_DETECT_THRESHOLD))
+    scene_manager.add_detector(ContentDetector(threshold=scene_threshold))
     scene_manager.detect_scenes(video=video, show_progress=True)
     scene_list = scene_manager.get_scene_list()
     print(f"[INFO] Scene detection complete. Found {len(scene_list)} scenes.")
@@ -182,7 +182,7 @@ def main(video_path):
                 diff = cv2.absdiff(sub_region, last_img)
                 diff_score = np.sum(diff)
 
-                if diff_score > CHANGE_THRESHOLD:
+                if diff_score > change_threshold:
                     if not subtitle_present:
                         subtitle_present = True
                         subtitle_start_frame = frame_number
@@ -219,6 +219,21 @@ def main(video_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract subtitle images from a video using a hybrid scene/difference detection method.")
     parser.add_argument('--video_path', required=True, help='Path to the video file.')
-    
+    parser.add_argument('--roi', type=str, help='Bypass interactive selection with coordinates y1,y2,x1,x2.')
+    parser.add_argument('--scene_threshold', type=float, default=SCENE_DETECT_THRESHOLD,
+                        help=f'Scene detection threshold (default: {SCENE_DETECT_THRESHOLD}).')
+    parser.add_argument('--change_threshold', type=float, default=CHANGE_THRESHOLD,
+                        help=f'Pixel change threshold (default: {CHANGE_THRESHOLD}).')
+
     args = parser.parse_args()
-    main(args.video_path)
+
+    roi = None
+    if args.roi:
+        try:
+            y1, y2, x1, x2 = map(int, args.roi.split(','))
+            roi = (y1, y2, x1, x2)
+        except ValueError:
+            print("[ERROR] Invalid --roi format. Expected y1,y2,x1,x2.")
+            sys.exit(1)
+
+    main(args.video_path, roi=roi, scene_threshold=args.scene_threshold, change_threshold=args.change_threshold)

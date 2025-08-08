@@ -1,3 +1,15 @@
+"""GUI launcher for the OCR/translation pipeline.
+
+When using ``extractor.py`` outside the GUI, the script now supports
+additional command-line flags:
+
+  --roi y1,y2,x1,x2        Provide subtitle region to skip interactive selection.
+  --scene_threshold FLOAT  Override scene detection sensitivity.
+  --change_threshold FLOAT Override pixel-change threshold for subtitle changes.
+
+These options allow batch or headless usage of the extractor component.
+"""
+
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 import subprocess
